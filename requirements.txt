@@ -1,7 +1,6 @@
 # Core Django
 Django>=4.2
 djangorestframework
-djangorestframework-authtoken
 
 # WebSockets & Channels
 channels
