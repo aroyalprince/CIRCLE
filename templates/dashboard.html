@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Circle - Dashboard</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- 1. THEME VARIABLES --- */
+        :root {
+            --primary: #00ff88;
+            --primary-dark: #00cc6a;
+            --bg-dark: #050505;
+            --surface: #121212;
+            --glass: rgba(18, 18, 18, 0.65);
+            --border: rgba(255, 255, 255, 0.08);
+            --text-main: #ffffff;
+            --text-muted: #888888;
+            --danger: #ff4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- 2. HEADER --- */
+        .app-header {
+            position: absolute; top: 15px; left: 15px; right: 15px;
+            height: 65px;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+        .logo { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.5px; color: var(--text-main); }
+        .logo span { color: var(--primary); }
+        .user-avatar-small { 
+            width: 40px; height: 40px; border-radius: 50%; 
+            border: 2px solid var(--primary); 
+            object-fit: cover; cursor: pointer; transition: transform 0.2s;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.2);
+        }
+        .user-avatar-small:active { transform: scale(0.95); }
+
+        /* --- 3. TOASTS --- */
+        #toast-container {
+            position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
+            z-index: 3000; width: 90%; max-width: 350px;
+            display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+        }
+        .toast {
+            background: rgba(15, 15, 15, 0.95);
+            backdrop-filter: blur(10px);
+            color: white; padding: 14px 20px; border-radius: 12px;
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+            display: flex; align-items: center; gap: 12px;
+            font-size: 0.9rem; font-weight: 500;
+            opacity: 0; transform: translateY(-10px) scale(0.95);
+            transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .toast.visible { opacity: 1; transform: translateY(0) scale(1); }
+        .toast.success { border-left: 4px solid var(--primary); }
+        .toast.error { border-left: 4px solid var(--danger); }
+
+        /* --- 4. MAP --- */
+        #map { flex: 1; width: 100%; height: 100%; z-index: 1; background: #080808; }
+        
+        .pulse-marker {
+            width: 20px; height: 20px; background: var(--primary);
+            border-radius: 50%; box-shadow: 0 0 0 rgba(0, 255, 136, 0.4);
+            animation: pulse 2s infinite; border: 3px solid #fff;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0.7); }
+            70% { box-shadow: 0 0 0 25px rgba(0, 255, 136, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 255, 136, 0); }
+        }
+
+        .custom-pin-container { display: flex; flex-direction: column; align-items: center; transition: transform 0.2s; }
+        .custom-pin-container:hover { transform: scale(1.15) translateY(-5px); z-index: 9999; }
+        .pin-avatar { 
+            width: 54px; height: 54px; border-radius: 50%; 
+            border: 3px solid var(--primary); background: #000; 
+            object-fit: cover; box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        }
+        .pin-pointer { 
+            width: 0; height: 0; 
+            border-left: 8px solid transparent; border-right: 8px solid transparent; 
+            border-top: 10px solid var(--primary); margin-top: -3px; 
+        }
+
+        /* --- 5. SQUAD DRAWER --- */
+        #squad-list-container {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            height: 38vh;
+            background: rgba(15, 15, 15, 0.85);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-top: 1px solid var(--border);
+            border-top-left-radius: 30px; border-top-right-radius: 30px;
+            padding: 10px 20px 20px 20px;
+            z-index: 900;
+            box-shadow: 0 -10px 50px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column;
+        }
+        
+        .drawer-handle {
+            width: 40px; height: 5px; background: rgba(255,255,255,0.2);
+            border-radius: 10px; margin: 10px auto 20px auto;
+        }
+
+        .list-header { 
+            font-size: 0.9rem; color: var(--text-main); 
+            font-weight: 700; margin-bottom: 15px; 
+        }
+
+        #squad-list { overflow-y: auto; padding-bottom: 20px; }
+        #squad-list::-webkit-scrollbar { display: none; }
+
+        .squad-card { 
+            background: rgba(255,255,255,0.03); 
+            padding: 18px; margin-bottom: 12px; border-radius: 18px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            border: 1px solid transparent;
+            transition: all 0.2s; cursor: pointer;
+        }
+        .squad-card:active { background: rgba(255,255,255,0.06); transform: scale(0.98); }
+        .squad-card:hover { border-color: rgba(0, 255, 136, 0.3); }
+        
+        .squad-info h3 { margin: 0; font-size: 1.1rem; color: white; font-weight: 600; }
+        .squad-info p { margin: 4px 0 0 0; font-size: 0.85rem; color: var(--text-muted); }
+        .squad-host { font-size: 0.75rem; color: var(--primary); margin-top: 4px; font-weight: 500; }
+        
+        .btn-join-small { 
+            background: var(--primary); color: #000; 
+            border: none; padding: 10px 20px; 
+            border-radius: 12px; font-size: 0.8rem; font-weight: 700; cursor: pointer; 
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.2);
+        }
+
+        /* --- 6. FAB & CONFIRM BUTTON --- */
+        .fab { 
+            position: absolute; bottom: calc(38vh + 20px); right: 20px; 
+            width: 60px; height: 60px; 
+            background: var(--primary); color: #000; 
+            border-radius: 50%; border: none; font-size: 32px; 
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3); 
+            cursor: pointer; z-index: 900; 
+            display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s;
+        }
+        .fab:active { transform: scale(0.9); }
+
+        #btn-confirm-loc {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: var(--primary); color: black;
+            padding: 15px 30px; border-radius: 30px; border: none;
+            font-weight: 800; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 2100; display: none; cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* --- 7. MODALS --- */
+        .modal { 
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; 
+            width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+            align-items: center; justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-content { 
+            background: #101010; border: 1px solid #222;
+            width: 100%; max-width: 380px; padding: 35px 25px; 
+            border-radius: 30px; text-align: center; 
+            box-shadow: 0 25px 60px rgba(0,0,0,0.7);
+            animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes popIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .input-group { text-align: left; margin-bottom: 15px; }
+        .input-group label { display: block; font-size: 0.75rem; color: #666; margin-bottom: 6px; margin-left: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        
+        input, select, textarea { 
+            width: 100%; padding: 18px; 
+            background: #1a1a1a; border: 1px solid #333; color: white; 
+            border-radius: 16px; font-family: inherit; font-size: 1rem; outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary); background: #222; }
+
+        .btn-primary { 
+            width: 100%; padding: 18px; margin-top: 15px;
+            background: var(--primary); color: #000; font-weight: 800; 
+            border: none; border-radius: 16px; font-size: 1rem; cursor: pointer;
+            letter-spacing: 0.5px;
+        }
+        .btn-secondary {
+            background: transparent; border: 1px solid #333; color: #888;
+            width: 100%; padding: 12px; border-radius: 14px; margin-top: 10px;
+            cursor: pointer; font-size: 0.9rem;
+        }
+        .btn-text { background: none; border: none; color: #888; padding: 15px; width: 100%; cursor: pointer; font-weight: 500; }
+
+        .profile-pic-large { width: 110px; height: 110px; border-radius: 50%; border: 4px solid var(--primary); object-fit: cover; margin-bottom: 15px; box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+        .tag { background: #222; padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; color: #ddd; display: inline-block; margin: 4px; border: 1px solid #333; }
+
+        /* Draggable Pin Marker Style */
+        .selection-pin {
+            width: 0; height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid var(--primary);
+            filter: drop-shadow(0 5px 5px rgba(0,0,0,0.5));
+            position: relative;
+        }
+        .selection-pin::after {
+            content: ''; position: absolute; top: -35px; left: -15px;
+            width: 30px; height: 30px; background: white; border-radius: 50%;
+            border: 4px solid var(--primary); box-sizing: border-box;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="toast-container"></div>
+
+    <header class="app-header">
+        <div class="logo">CIRCLE<span>.</span></div>
+        <img id="header-avatar" class="user-avatar-small" src="" onclick="openProfile()" alt="Me">
+        <button class="btn-icon" onclick="window.location.href='/random-video/'" 
+                style="margin-left: auto; margin-right: 15px; background: rgba(0, 255, 136, 0.2); border-color: var(--primary); color: var(--primary); font-size: 1.2rem;">
+            🎲
+        </button>
+    </header>
+
+    <div id="map"></div>
+
+    <button id="btn-confirm-loc" onclick="confirmLocation()">✅ SET LOCATION</button>
+
+    <div id="squad-list-container">
+        <div class="drawer-handle"></div>
+        <div class="list-header">NEARBY SQUADS</div>
+        <div id="squad-list">
+            <p style="text-align:center; color:#444; margin-top: 20px;">Scanning area...</p>
+        </div>
+    </div>
+
+    <button class="fab" onclick="openCreateModal()">+</button>
+
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 5px;">Go Live</h2>
+            <p style="color: #666; margin-bottom: 15px; font-size: 0.9rem;">Start a squad at your location.</p>
+            
+            <button class="btn-secondary" onclick="enableLocationPicker()">📍 Adjust Location</button>
+            <p id="loc-status" style="font-size: 0.75rem; color: var(--primary); margin-top: 5px; opacity: 0;">Location Updated</p>
+
+            <div class="input-group" style="margin-top: 20px;">
+                <label>Squad Name</label>
+                <input type="text" id="squad_name" placeholder="e.g. The Night Owls">
+            </div>
+
+            <div class="input-group">
+                <label>Activity</label>
+                <input type="text" id="activity" placeholder="e.g. Coffee & Code">
+            </div>
+
+            <div class="input-group">
+                <label>Who can join?</label>
+                <select id="gender_rule">
+                    <option value="ANY">Everyone Welcome</option>
+                    <option value="SAME">Girls/Boys Only (Same Gender)</option>
+                </select>
+            </div>
+            
+            <button class="btn-primary" id="btn-create-go" onclick="createSquad()">START SQUAD</button>
+            <button class="btn-text" onclick="closeCreateModal()">Cancel</button>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 10px;">Join Squad?</h2>
+            <p style="color: #888; margin-bottom: 20px;">You will join the chat for this activity.</p>
+            <div style="display:flex; gap:10px;">
+                <button class="btn-primary" id="btn-confirm-yes">JOIN NOW</button>
+                <button class="btn-text" onclick="closeConfirmModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="profileModal" class="modal">
+        <div class="modal-content">
+            <div id="profile-read-only">
+                <img id="profile-pic-large" class="profile-pic-large" src="">
+                <h2 id="display-realname" style="margin-bottom: 2px;">Name</h2>
+                <p id="display-username" style="color:var(--primary); margin-bottom:15px; font-family: monospace;">@username</p>
+                
+                <div style="margin-bottom: 20px;">
+                    <span class="tag" id="display-age">--</span>
+                    <span class="tag" id="display-gender">--</span>
+                </div>
+                <p id="display-bio" style="color:#888; font-style: italic; margin-bottom: 25px; line-height: 1.5;">No bio yet.</p>
+
+                <button class="btn-primary" style="background: #222; color: white; border: 1px solid #333;" onclick="enableEditMode()">Edit Profile</button>
+                <button class="btn-text" onclick="logout()" style="color: #ff4444;">Log Out</button>
+                <button class="btn-text" onclick="closeProfile()">Close</button>
+            </div>
+
+            <div id="profile-edit-mode" style="display: none;">
+                <h3 style="margin-bottom: 20px;">Edit Profile</h3>
+                <input type="file" id="file-upload" style="display:none;" onchange="previewImage(event)">
+                
+                <div style="position: relative; width: 100px; margin: 0 auto 20px auto;" onclick="document.getElementById('file-upload').click()">
+                    <img id="profile-pic-preview" class="user-avatar-small" style="width:100px; height:100px; display:block;">
+                    <div style="position: absolute; bottom: 0; right: 0; background: var(--primary); padding: 5px; border-radius: 50%;">📷</div>
+                </div>
+
+                <div class="input-group">
+                    <input type="text" id="edit-realname" placeholder="Full Name">
+                </div>
+                <div class="input-group">
+                    <input type="text" id="edit-bio" placeholder="Short Bio">
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <input type="date" id="edit-age">
+                    <select id="edit-gender"><option value="M">Male</option><option value="F">Female</option><option value="O">Other</option></select>
+                </div>
+                <button class="btn-primary" id="btn-save-profile" onclick="saveProfile()">Save Changes</button>
+                <button class="btn-text" onclick="disableEditMode()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="hostProfileModal" class="modal">
+        <div class="modal-content">
+            <img id="host-pic-large" class="profile-pic-large" src="">
+            <h2 id="host-realname" style="margin-bottom: 5px;">Host Name</h2>
+            <p id="host-username" style="color:var(--primary); margin-bottom:15px;">@username</p>
+            <div style="margin-bottom: 15px;">
+                <span class="tag" id="host-age">--</span>
+                <span class="tag" id="host-gender">--</span>
+            </div>
+            <p id="host-bio" style="color:#888; margin-bottom: 25px;">...</p>
+            
+            <button class="btn-primary" id="host-join-btn">JOIN SQUAD</button>
+            <button class="btn-text" onclick="closeHostProfile()">Close</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 1. CONFIG
+       const API_BASE = window.location.origin;
+        
+        const token = localStorage.getItem('circle_token');
+        if (!token) window.location.href = '/login/';
+        
+        let authPrefix = 'Token';
+        if (token && token.length > 50) authPrefix = 'Bearer';
+        const AUTH_HEADER = `${authPrefix} ${token}`;
+
+        // --- 2. UI HELPERS ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            const icon = type === 'success' ? '✓' : '⚠️';
+            toast.innerHTML = `<span>${icon}</span> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('visible'), 10);
+            setTimeout(() => {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        let confirmCallback = null;
+        function openConfirmModal(onConfirm) {
+            confirmCallback = onConfirm;
+            document.getElementById('confirmModal').style.display = 'flex';
+        }
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').style.display = 'none';
+            confirmCallback = null;
+        }
+        document.getElementById('btn-confirm-yes').onclick = () => {
+            if (confirmCallback) confirmCallback();
+            closeConfirmModal();
+        };
+
+        // --- 3. DATA & LOGIC ---
+        // Profile state container
+        let myProfile = { 
+            username: "User",
+            pic: null,
+            realName: "Loading...",
+            bio: "",
+            gender: "O",
+            dob: null
+        };
+        
+        // GLOBAL LOCATION VARIABLES
+        let currentLat = 0, currentLng = 0; // GPS Position
+        let selectedLat = 0, selectedLng = 0; // Chosen Position
+        let creationMarker = null; // The Draggable Marker
+
+        function calculateAge(dobString) {
+            if (!dobString || dobString === "null") return "--";
+            const birthday = new Date(dobString);
+            if (isNaN(birthday)) return "--"; 
+            const ageDifMs = Date.now() - birthday.getTime();
+            const ageDate = new Date(ageDifMs); 
+            return Math.abs(ageDate.getUTCFullYear() - 1970);
+        }
+
+        function getGenderName(code) {
+            if (!code) return "Other";
+            const c = String(code).toUpperCase();
+            if(c.startsWith('M')) return 'Male';
+            if(c.startsWith('F')) return 'Female';
+            return 'Other';
+        }
+
+        // NEW: Fetch profile safely (runs on load)
+        async function fetchMyProfile() {
+            // 1. Try to get data from LocalStorage
+            myProfile.username = localStorage.getItem('circle_username') || "User";
+            
+            let storedPic = localStorage.getItem('circle_pic');
+            if (storedPic && !storedPic.startsWith('http')) {
+                myProfile.pic = API_BASE + storedPic;
+            } else {
+                myProfile.pic = storedPic;
+            }
+            
+            myProfile.realName = localStorage.getItem('circle_realname') || myProfile.username;
+            myProfile.bio = localStorage.getItem('circle_bio') || "No bio yet.";
+            myProfile.gender = localStorage.getItem('circle_gender') || "O";
+            myProfile.dob = localStorage.getItem('circle_dob');
+
+            // 2. Update UI
+            updateHeader();
+        }
+
+        function updateHeader() {
+            let src = myProfile.pic;
+            if (!src) src = `https://ui-avatars.com/api/?name=${myProfile.username}&background=00ff88&color=000`;
+            
+            document.getElementById('header-avatar').src = src;
+            document.getElementById('profile-pic-large').src = src;
+            document.getElementById('profile-pic-preview').src = src;
+
+            document.getElementById('display-realname').innerText = myProfile.realName;
+            document.getElementById('display-username').innerText = "@" + myProfile.username;
+            document.getElementById('display-bio').innerText = myProfile.bio;
+            document.getElementById('display-age').innerText = calculateAge(myProfile.dob) + " y/o";
+            document.getElementById('display-gender').innerText = getGenderName(myProfile.gender);
+
+            document.getElementById('edit-realname').value = myProfile.realName;
+            document.getElementById('edit-bio').value = myProfile.bio;
+            document.getElementById('edit-gender').value = myProfile.gender; 
+            document.getElementById('edit-age').value = myProfile.dob;
+        }
+
+        // Start Fetch immediately
+        fetchMyProfile();
+
+        // --- 4. MAP SETUP ---
+        const map = L.map('map', { zoomControl: false }).setView([0, 0], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; CARTO', subdomains: 'abcd', maxZoom: 19
+        }).addTo(map);
+
+        let squadMarkers = [], squadsData = [];
+
+        navigator.geolocation.getCurrentPosition(pos => {
+            currentLat = pos.coords.latitude; 
+            currentLng = pos.coords.longitude;
+            // Initialize selection variables
+            selectedLat = currentLat;
+            selectedLng = currentLng;
+            
+            map.setView([currentLat, currentLng], 15);
+            const pulseIcon = L.divIcon({ className: 'pulse-marker', iconSize: [20, 20] });
+            L.marker([currentLat, currentLng], { icon: pulseIcon }).addTo(map);
+            findSquads();
+        }, err => showToast("GPS Permission Denied", "error"));
+
+        async function findSquads() {
+            if (currentLat === 0) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/squad/find/?latitude=${currentLat}&longitude=${currentLng}`, { 
+                    headers: { 'Authorization': AUTH_HEADER } 
+                });
+                if (res.ok) { 
+                    squadsData = await res.json(); 
+                    renderSquads(); 
+                } else if (res.status === 401) {
+                    localStorage.clear(); window.location.href='/login/';
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function renderSquads() {
+            const listDiv = document.getElementById('squad-list');
+            listDiv.innerHTML = squadsData.map(s => `
+                <div class="squad-card" onclick="focusSquad(${s.latitude}, ${s.longitude}, ${s.id})">
+                    <div class="squad-info">
+                        <h3>${s.name || s.activity}</h3>
+                        <p>${s.name ? s.activity : 'Activity'}</p>
+                        <div class="squad-host">Host: @${s.created_by}</div>
+                    </div>
+                    <button class="btn-join-small" onclick="event.stopPropagation(); requestJoin(${s.id})">JOIN</button>
+                </div>
+            `).join('') || "<p style='text-align:center; color:#666; padding:10px;'>No active squads nearby.</p>";
+
+            squadMarkers.forEach(m => map.removeLayer(m));
+            squadsData.forEach(s => {
+                const avatar = s.host_pic ? (s.host_pic.startsWith('http') ? s.host_pic : API_BASE + s.host_pic) : `https://ui-avatars.com/api/?name=${s.created_by}&background=00ff88&color=000`;
+                const icon = L.divIcon({ 
+                    className: 'custom-div-icon', 
+                    html: `<div class="custom-pin-container"><img src="${avatar}" class="pin-avatar"><div class="pin-pointer"></div></div>`, 
+                    iconSize: [50, 60], iconAnchor: [25, 60] 
+                });
+                const marker = L.marker([s.latitude, s.longitude], { icon }).addTo(map);
+                marker.on('click', () => openHostProfile(s.id));
+                squadMarkers.push(marker);
+            });
+        }
+
+        function focusSquad(lat, lng, id) { map.flyTo([lat, lng], 16); }
+
+        // --- NEW: LOCATION PICKER LOGIC ---
+        function enableLocationPicker() {
+            // 1. Hide the Modal
+            closeCreateModal();
+            
+            // 2. Add Draggable Pin to Center of Map
+            const center = map.getCenter();
+            
+            // Custom Pin Icon
+            const pinIcon = L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div class="selection-pin"></div>`,
+                iconSize: [30, 42],
+                iconAnchor: [15, 42]
+            });
+
+            creationMarker = L.marker(center, {
+                draggable: true,
+                icon: pinIcon
+            }).addTo(map);
+
+            // 3. Show "Confirm" Button
+            document.getElementById('btn-confirm-loc').style.display = 'block';
+            
+            // Update variable on drag
+            creationMarker.on('dragend', function(e) {
+                const pos = e.target.getLatLng();
+                selectedLat = pos.lat;
+                selectedLng = pos.lng;
+            });
+
+            // Also update if map moves (optional, but good UX if pin stays center)
+            // simplified: we just let them drag the pin.
+            
+            showToast("Drag pin to location", "success");
+        }
+
+        function confirmLocation() {
+            // 1. Get final position from marker
+            const pos = creationMarker.getLatLng();
+            selectedLat = pos.lat;
+            selectedLng = pos.lng;
+
+            // 2. Remove Marker & Button
+            map.removeLayer(creationMarker);
+            document.getElementById('btn-confirm-loc').style.display = 'none';
+
+            // 3. Re-open Modal
+            document.getElementById('createModal').style.display = 'flex';
+            
+            // 4. Show "Updated" status
+            document.getElementById('loc-status').style.opacity = '1';
+        }
+
+        async function createSquad() {
+            const name = document.getElementById('squad_name').value;
+            const activity = document.getElementById('activity').value;
+            const gender_rule = document.getElementById('gender_rule').value;
+            const btn = document.getElementById('btn-create-go');
+            
+            if(!activity) return showToast("Enter an activity", "error");
+
+            btn.innerText = "Creating...";
+            try {
+                const res = await fetch(`${API_BASE}/api/squad/create/`, { 
+                    method: 'POST', 
+                    headers: { 'Authorization': AUTH_HEADER, 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ 
+                        name: name,
+                        activity: activity, 
+                        gender_rule: gender_rule, 
+                        // ✅ USE SELECTED LOCATION
+                        latitude: selectedLat, 
+                        longitude: selectedLng 
+                    }) 
+                });
+                if(res.ok) { 
+                    closeCreateModal(); findSquads(); showToast("Squad Live!", "success");
+                } else {
+                    const d = await res.json(); showToast(d.error || "Failed", "error");
+                }
+            } catch(e) { showToast("Connection Error", "error"); }
+            btn.innerText = "START SQUAD";
+        }
+
+        function requestJoin(id) { openConfirmModal(() => joinSquad(id)); }
+
+        async function joinSquad(id) {
+            try {
+                const res = await fetch(`${API_BASE}/api/squad/join/${id}/`, { 
+                    method: 'POST', headers: { 'Authorization': AUTH_HEADER } 
+                });
+                if(res.ok) window.location.href = `/chat/${id}/`;
+                else { const d = await res.json(); showToast(d.message || "Cannot join", "error"); }
+            } catch(e) { showToast("Connection Error", "error"); }
+        }
+
+        async function saveProfile() {
+            const btn = document.getElementById('btn-save-profile');
+            btn.innerText = "Saving...";
+            
+            const formData = new FormData();
+            formData.append('real_name', document.getElementById('edit-realname').value);
+            formData.append('bio', document.getElementById('edit-bio').value);
+            formData.append('gender', document.getElementById('edit-gender').value);
+            formData.append('dob', document.getElementById('edit-age').value);
+            
+            const file = document.getElementById('file-upload').files[0];
+            if (file) formData.append('profile_pic', file);
+
+            try {
+                const res = await fetch(`${API_BASE}/api/profile/update/`, { 
+                    method: 'POST', headers: { 'Authorization': AUTH_HEADER }, body: formData 
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    myProfile.realName = formData.get('real_name');
+                    myProfile.bio = formData.get('bio');
+                    myProfile.gender = formData.get('gender');
+                    myProfile.dob = formData.get('dob');
+                    if (data.profile_pic) myProfile.pic = data.profile_pic;
+
+                    localStorage.setItem('circle_realname', myProfile.realName);
+                    localStorage.setItem('circle_bio', myProfile.bio);
+                    localStorage.setItem('circle_gender', myProfile.gender);
+                    localStorage.setItem('circle_dob', myProfile.dob);
+                    if (data.profile_pic) localStorage.setItem('circle_pic', myProfile.pic);
+                    
+                    updateHeader();
+                    disableEditMode();
+                    showToast("Profile Updated", "success");
+                } else {
+                    showToast("Update Failed", "error");
+                }
+            } catch (e) { showToast("Connection Error", "error"); }
+            btn.innerText = "Save Changes";
+        }
+
+        function openHostProfile(sid) {
+            const s = squadsData.find(x => x.id === sid);
+            let pic = s.host_pic ? (s.host_pic.startsWith('http') ? s.host_pic : API_BASE + s.host_pic) : `https://ui-avatars.com/api/?name=${s.created_by}&background=00ff88&color=000`;
+            
+            document.getElementById('host-pic-large').src = pic;
+            document.getElementById('host-realname').innerText = s.created_by; 
+            document.getElementById('host-username').innerText = "@" + s.created_by;
+            document.getElementById('host-bio').innerText = s.activity; 
+            
+            document.getElementById('host-age').innerText = (s.host_dob ? calculateAge(s.host_dob) : "--") + " y/o";
+            document.getElementById('host-gender').innerText = getGenderName(s.host_gender);
+            
+            const btn = document.getElementById('host-join-btn');
+            btn.onclick = () => requestJoin(s.id);
+            document.getElementById('hostProfileModal').style.display = 'flex';
+        }
+
+        const getEl = (id) => document.getElementById(id);
+        function openCreateModal() { 
+            // Reset location on open if needed, or keep last selected
+            if (selectedLat === 0) { selectedLat = currentLat; selectedLng = currentLng; }
+            getEl('createModal').style.display = 'flex'; 
+        }
+        function closeCreateModal() { getEl('createModal').style.display = 'none'; }
+        function openProfile() { getEl('profileModal').style.display = 'flex'; }
+        function closeProfile() { getEl('profileModal').style.display = 'none'; disableEditMode(); }
+        function closeHostProfile() { getEl('hostProfileModal').style.display = 'none'; }
+        function enableEditMode() { getEl('profile-read-only').style.display='none'; getEl('profile-edit-mode').style.display='block'; }
+        function disableEditMode() { getEl('profile-edit-mode').style.display='none'; getEl('profile-read-only').style.display='block'; }
+        function logout() { localStorage.clear(); window.location.href = '/login/'; }
+        function previewImage(e) { const f=e.target.files[0]; if(f){const r=new FileReader(); r.onload=x=>getEl('profile-pic-preview').src=x.target.result; r.readAsDataURL(f);} }
+
+        setInterval(() => { if(currentLat !== 0) findSquads(); }, 10000);
+    </script>
+</body>
+</html>

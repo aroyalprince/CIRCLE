@@ -1,0 +1,35 @@
+# Core Django
+Django>=4.2
+djangorestframework
+djangorestframework-authtoken
+
+# WebSockets & Channels
+channels
+daphne
+channels-redis
+
+# Authentication
+django-allauth
+dj-rest-auth
+
+# Database
+psycopg2-binary
+dj-database-url
+
+# Static Files
+whitenoise
+
+# Crypto (for any remaining token work)
+pycryptodome
+
+# Cache
+django-redis
+
+# Image handling (for profile pics & id cards)
+Pillow
+
+# CORS (if your frontend is separate)
+django-cors-headers
+
+# Environment variables
+python-dotenv

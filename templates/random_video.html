@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Circle — Meet Someone New</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --green: #00ff88;
+            --green-dim: rgba(0,255,136,0.15);
+            --green-glow: rgba(0,255,136,0.4);
+            --red: #ff3b5c;
+            --red-dim: rgba(255,59,92,0.15);
+            --amber: #ffb830;
+            --bg: #080808;
+            --surface: #111111;
+            --surface2: #1a1a1a;
+            --border: rgba(255,255,255,0.06);
+            --border-bright: rgba(255,255,255,0.12);
+            --text: #f0f0f0;
+            --text-dim: rgba(240,240,240,0.45);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            font-family: 'DM Sans', sans-serif;
+            overflow: hidden;
+            height: 100dvh;
+            color: var(--text);
+        }
+
+        /* ── BACKGROUND GRAIN ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 100;
+            opacity: 0.5;
+        }
+
+        /* ── VIDEO STAGE ── */
+        #stage {
+            position: relative;
+            width: 100vw;
+            height: 100dvh;
+        }
+
+        #remote-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+            transition: opacity 0.5s ease;
+        }
+
+        /* ── LOCAL PIP ── */
+        #local-wrap {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 30;
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: 0 0 0 2px var(--green), 0 8px 32px rgba(0,0,0,0.6), 0 0 40px var(--green-glow);
+            transition: transform 0.3s cubic-bezier(.34,1.56,.64,1);
+        }
+        #local-wrap:hover { transform: scale(1.04); }
+
+        #local-video {
+            width: 110px;
+            height: 148px;
+            object-fit: cover;
+            display: block;
+            transform: scaleX(-1);
+            background: #111;
+        }
+
+        /* ── STATUS OVERLAY ── */
+        #overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(8,8,8,0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 20;
+            gap: 28px;
+            transition: opacity 0.4s ease;
+        }
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .orb {
+            position: relative;
+            width: 88px;
+            height: 88px;
+        }
+        .orb-ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 2px solid var(--green);
+            animation: orbPulse 2s ease-out infinite;
+        }
+        .orb-ring:nth-child(2) { animation-delay: 0.6s; }
+        .orb-ring:nth-child(3) { animation-delay: 1.2s; }
+        .orb-core {
+            position: absolute;
+            inset: 20px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 20px var(--green-glow), 0 0 60px var(--green-glow);
+            animation: coreBreath 2s ease-in-out infinite;
+        }
+
+        @keyframes orbPulse {
+            0% { transform: scale(0.8); opacity: 1; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+        @keyframes coreBreath {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(0.88); }
+        }
+
+        #status-label {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            color: var(--text);
+            text-align: center;
+            max-width: 280px;
+            line-height: 1.5;
+        }
+
+        #status-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            font-weight: 300;
+            letter-spacing: 0.02em;
+        }
+
+        /* ── TOP BAR ── */
+        #topbar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 24px;
+            background: linear-gradient(to bottom, rgba(8,8,8,0.7) 0%, transparent 100%);
+        }
+
+        .logo {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.1rem;
+            letter-spacing: 0.1em;
+            color: var(--green);
+            text-transform: uppercase;
+        }
+
+        #live-badge {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,59,92,0.12);
+            border: 1px solid rgba(255,59,92,0.3);
+            border-radius: 20px;
+            padding: 5px 12px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: var(--red);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        #live-badge.visible { opacity: 1; }
+        .live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--red);
+            animation: blink 1.2s ease-in-out infinite;
+        }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        /* ── BOTTOM CONTROLS ── */
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 30;
+            padding: 30px 24px 36px;
+            background: linear-gradient(to top, rgba(8,8,8,0.85) 0%, transparent 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+        }
+
+        /* base button */
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            transition: transform 0.15s cubic-bezier(.34,1.56,.64,1), box-shadow 0.2s, background 0.2s;
+            -webkit-tap-highlight-color: transparent;
+            outline: none;
+        }
+        .btn:active { transform: scale(0.91) !important; }
+
+        /* icon buttons */
+        .btn-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            font-size: 1.15rem;
+            background: var(--surface2);
+            border: 1px solid var(--border-bright);
+            color: var(--text);
+        }
+        .btn-icon:hover { transform: scale(1.08); background: rgba(255,255,255,0.1); }
+
+        /* active (green) state */
+        .btn-icon.on {
+            background: var(--green-dim);
+            border-color: rgba(0,255,136,0.35);
+            color: var(--green);
+            box-shadow: 0 0 16px rgba(0,255,136,0.2);
+        }
+
+        /* red/leave button */
+        .btn-leave {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            font-size: 1rem;
+            background: var(--red-dim);
+            border: 1px solid rgba(255,59,92,0.35);
+            color: var(--red);
+            box-shadow: 0 0 16px rgba(255,59,92,0.15);
+        }
+        .btn-leave:hover { transform: scale(1.08); background: rgba(255,59,92,0.25); }
+
+        /* NEXT button — prominent */
+        .btn-next {
+            height: 52px;
+            padding: 0 28px;
+            border-radius: 26px;
+            font-size: 0.88rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            background: var(--green);
+            color: #050505;
+            box-shadow: 0 0 24px var(--green-glow), 0 4px 16px rgba(0,0,0,0.4);
+            gap: 8px;
+        }
+        .btn-next:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 36px var(--green-glow), 0 4px 24px rgba(0,0,0,0.4);
+        }
+
+        .btn-next svg {
+            width: 16px;
+            height: 16px;
+            fill: #050505;
+        }
+
+        /* ── PARTNER INFO CHIP ── */
+        #partner-chip {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%) translateY(12px);
+            background: rgba(17,17,17,0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-bright);
+            border-radius: 24px;
+            padding: 8px 18px;
+            font-size: 0.78rem;
+            color: var(--text-dim);
+            letter-spacing: 0.03em;
+            z-index: 25;
+            opacity: 0;
+            transition: opacity 0.4s, transform 0.4s;
+            white-space: nowrap;
+        }
+        #partner-chip.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ── TIMER ── */
+        #timer {
+            position: absolute;
+            top: 18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: 'Syne', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            z-index: 30;
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+        #timer.visible { opacity: 1; }
+    </style>
+</head>
+<body>
+<div id="stage">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay playsinline muted></video>
+
+    <div id="local-wrap">
+        <!-- local video injected here by JS -->
+    </div>
+
+    <!-- Top bar -->
+    <div id="topbar">
+        <span class="logo">Circle</span>
+        <div id="live-badge">
+            <span class="live-dot"></span>
+            Live
+        </div>
+    </div>
+
+    <!-- Timer -->
+    <div id="timer">00:00</div>
+
+    <!-- Status overlay -->
+    <div id="overlay">
+        <div class="orb">
+            <div class="orb-ring"></div>
+            <div class="orb-ring"></div>
+            <div class="orb-ring"></div>
+            <div class="orb-core"></div>
+        </div>
+        <div>
+            <div id="status-label">Starting camera...</div>
+            <div id="status-sub" style="margin-top:8px;text-align:center"></div>
+        </div>
+    </div>
+
+    <!-- Partner chip -->
+    <div id="partner-chip">🌍 Connected to a stranger</div>
+
+    <!-- Controls -->
+    <div id="controls">
+        <button class="btn btn-leave" onclick="leaveChat()" title="Leave">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            </svg>
+        </button>
+
+        <button class="btn btn-icon on" id="mic-btn" onclick="toggleMic()" title="Mute">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-7 10a7 7 0 0 0 14 0M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+            </svg>
+        </button>
+
+        <button class="btn btn-next" onclick="nextPerson()">
+            <svg viewBox="0 0 24 24"><path d="M5 4l10 8-10 8V4zm11 0h3v16h-3V4z"/></svg>
+            Next
+        </button>
+
+        <button class="btn btn-icon on" id="cam-btn" onclick="toggleCam()" title="Camera">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+        </button>
+
+        <button class="btn btn-icon" id="report-btn" title="Report" style="font-size:1rem;">
+            🚩
+        </button>
+    </div>
+</div>
+
+<script>
+const myToken = localStorage.getItem('circle_token');
+const myUsername = localStorage.getItem('circle_username') || 'user_' + Math.random().toString(36).slice(2,7);
+
+const ICE_SERVERS = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+    ]
+};
+
+let localStream = null;
+let peerConnection = null;
+let ws = null;
+let myRole = null;
+let isMicOn = true;
+let isCamOn = true;
+let isConnecting = false;
+let iInitiatedNext = false;   // ✅ loop fix flag
+let timerInterval = null;
+let timerSeconds = 0;
+
+// ── CAMERA ──────────────────────────────────────────────────────────
+async function startCamera() {
+    if (localStream) return true;
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const localVid = document.getElementById('local-video');
+        localVid.srcObject = localStream;
+        document.getElementById('local-wrap').appendChild(localVid);
+        return true;
+    } catch (err) {
+        setStatus('Camera denied!', 'Allow camera access to continue');
+        return false;
+    }
+}
+
+// ── WEBSOCKET ────────────────────────────────────────────────────────
+function connectWS() {
+    if (ws) { ws.onclose = null; ws.close(); }
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${scheme}://${location.host}/ws/video/?token=${myToken}`);
+
+    ws.onopen = () => {
+        console.log('✅ WS open');
+        setStatus('Looking for someone...', 'Connecting you with a stranger');
+        ws.send(JSON.stringify({ type: 'find_match' }));
+    };
+
+    ws.onmessage = async (e) => {
+        const data = JSON.parse(e.data);
+        console.log('📨', data.type);
+
+        if (data.type === 'waiting') {
+            setStatus('Looking for someone...', 'Hang tight — finding a match');
+
+        } else if (data.type === 'match_found') {
+            if (isConnecting) return;
+            isConnecting = true;
+            myRole = data.role;
+            setStatus('Found someone!', 'Setting up connection...');
+            await setupPeerConnection();
+
+            if (myRole === 'caller') {
+                try {
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    ws.send(JSON.stringify({ type: 'offer', offer }));
+                } catch(err) {
+                    console.error('Offer failed:', err);
+                    isConnecting = false;
+                }
+            }
+
+        } else if (data.type === 'offer') {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                ws.send(JSON.stringify({ type: 'answer', answer }));
+            } catch(err) { console.error('Answer failed:', err); }
+
+        } else if (data.type === 'answer') {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch(err) { console.error('Set answer failed:', err); }
+
+        } else if (data.type === 'ice_candidate') {
+            try {
+                if (data.candidate && peerConnection) {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            } catch(err) { /* ignore stale candidates */ }
+
+        } else if (data.type === 'peer_left') {
+            // ✅ THE LOOP FIX — if WE initiated next, ignore this echo
+            if (iInitiatedNext) {
+                iInitiatedNext = false;
+                return;
+            }
+            console.log('👋 Partner left');
+            isConnecting = false;
+            stopTimer();
+            document.getElementById('remote-video').srcObject = null;
+            document.getElementById('live-badge').classList.remove('visible');
+            document.getElementById('partner-chip').classList.remove('visible');
+            document.getElementById('overlay').classList.remove('hidden');
+            document.getElementById('loader-ring') && (document.querySelector('.orb').style.display = 'flex');
+            setStatus('They left 👋', 'Click Next to meet someone new');
+        }
+    };
+
+    ws.onclose = () => { isConnecting = false; };
+    ws.onerror = (e) => console.error('WS error', e);
+}
+
+// ── PEER CONNECTION ───────────────────────────────────────────────────
+async function setupPeerConnection() {
+    if (peerConnection) {
+        peerConnection.ontrack = null;
+        peerConnection.onicecandidate = null;
+        peerConnection.onconnectionstatechange = null;
+        peerConnection.close();
+        peerConnection = null;
+    }
+
+    peerConnection = new RTCPeerConnection(ICE_SERVERS);
+    localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+
+    peerConnection.ontrack = (event) => {
+        console.log('🎥 Remote stream!');
+        document.getElementById('remote-video').srcObject = event.streams[0];
+        document.getElementById('overlay').classList.add('hidden');
+        document.getElementById('live-badge').classList.add('visible');
+        document.getElementById('partner-chip').classList.add('visible');
+        isConnecting = false;
+        startTimer();
+    };
+
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate && ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ice_candidate', candidate: event.candidate }));
+        }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+        console.log('🔗', peerConnection.connectionState);
+        if (peerConnection.connectionState === 'failed') {
+            isConnecting = false;
+            stopTimer();
+            setStatus('Connection failed', 'Click Next to try again');
+            document.getElementById('overlay').classList.remove('hidden');
+        }
+    };
+}
+
+// ── CONTROLS ─────────────────────────────────────────────────────────
+async function nextPerson() {
+    iInitiatedNext = true;   // ✅ mark WE are leaving
+    isConnecting = false;
+    stopTimer();
+
+    document.getElementById('remote-video').srcObject = null;
+    document.getElementById('overlay').classList.remove('hidden');
+    document.getElementById('live-badge').classList.remove('visible');
+    document.getElementById('partner-chip').classList.remove('visible');
+    setStatus('Finding next person...', 'Looking for a new match');
+
+    if (peerConnection) {
+        peerConnection.ontrack = null;
+        peerConnection.onicecandidate = null;
+        peerConnection.onconnectionstatechange = null;
+        peerConnection.close();
+        peerConnection = null;
+    }
+
+    if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'next' }));
+    } else {
+        iInitiatedNext = false;
+        connectWS();
+    }
+}
+
+function leaveChat() {
+    isConnecting = false;
+    stopTimer();
+    if (peerConnection) peerConnection.close();
+    if (ws) { ws.onclose = null; ws.close(); }
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    window.location.href = '/dashboard/';
+}
+
+function toggleMic() {
+    isMicOn = !isMicOn;
+    localStream.getAudioTracks().forEach(t => t.enabled = isMicOn);
+    const btn = document.getElementById('mic-btn');
+    btn.classList.toggle('on', isMicOn);
+    btn.style.color = isMicOn ? 'var(--green)' : 'var(--red)';
+}
+
+function toggleCam() {
+    isCamOn = !isCamOn;
+    localStream.getVideoTracks().forEach(t => t.enabled = isCamOn);
+    const btn = document.getElementById('cam-btn');
+    btn.classList.toggle('on', isCamOn);
+}
+
+// ── TIMER ─────────────────────────────────────────────────────────────
+function startTimer() {
+    timerSeconds = 0;
+    const el = document.getElementById('timer');
+    el.classList.add('visible');
+    timerInterval = setInterval(() => {
+        timerSeconds++;
+        const m = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
+        const s = String(timerSeconds % 60).padStart(2, '0');
+        el.textContent = `${m}:${s}`;
+    }, 1000);
+}
+
+function stopTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    const el = document.getElementById('timer');
+    el.classList.remove('visible');
+    el.textContent = '00:00';
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────
+function setStatus(main, sub = '') {
+    document.getElementById('status-label').textContent = main;
+    document.getElementById('status-sub').textContent = sub;
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────
+startCamera().then(ok => { if (ok) connectWS(); });
+</script>
+</body>
+</html>
