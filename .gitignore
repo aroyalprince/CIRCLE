@@ -1,0 +1,25 @@
+# create this file in your project root
+```
+
+`.gitignore`:
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+env/
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+
+# Mac
+.DS_Store
+
+# Secrets
+*.env
+.env.local
